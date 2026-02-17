@@ -13,7 +13,7 @@ const DEFAULT_HEADERS: Record<string, string> = {
 const FREE_MODELS = [
 	{
 		id: "kimi-k2.5-free",
-		name: "Kimi K2.5 Free",
+		name: "Kimi K2.5",
 		reasoning: true,
 		input: ["text", "image"],
 		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
@@ -22,7 +22,7 @@ const FREE_MODELS = [
 	},
 	{
 		id: "glm-5-free",
-		name: "GLM-5 Free",
+		name: "GLM-5",
 		reasoning: true,
 		input: ["text"],
 		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
@@ -40,7 +40,7 @@ const FREE_MODELS = [
 	},
 	{
 		id: "minimax-m2.5-free",
-		name: "MiniMax M2.5 Free",
+		name: "MiniMax M2.5",
 		reasoning: true,
 		input: ["text"],
 		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
@@ -75,7 +75,7 @@ export default function (pi: ExtensionAPI) {
 		headers: DEFAULT_HEADERS,
 		models: FREE_MODELS,
 		oauth: {
-			name: "OpenCode Zen (Free)",
+			name: "Zen",
 			login: loginZen,
 			refreshToken: refreshZenToken,
 			getApiKey: () => "public",

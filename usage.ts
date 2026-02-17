@@ -19,6 +19,7 @@ interface UsageSnapshot {
 	displayName: string;
 	windows: RateWindow[];
 	plan?: string;
+	email?: string;
 	error?: string;
 	status?: ProviderStatus;
 	selected?: boolean;
@@ -178,8 +179,7 @@ async function fetchClaudeProfileAndUsage(token: string, authKey: string = "anth
 		clearTimeout(timer);
 		const res = usageRes;
 		if (!res.ok) {
-			const baseName = authKey === "anthropic" ? "claude" : `claude (${authKey})`;
-			return { provider: "anthropic", displayName: profile.email ? `claude (${profile.email})` : baseName, windows: [], error: `http ${res.status}` };
+			return { provider: "anthropic", displayName: "claude", windows: [], error: `http ${res.status}`, email: profile.email };
 		}
 		const data = await res.json() as any;
 		const windows: RateWindow[] = [];
@@ -205,12 +205,9 @@ async function fetchClaudeProfileAndUsage(token: string, authKey: string = "anth
 			});
 		}
 		if (profile.email) cacheEmail(authKey, profile.email);
-		const baseName = authKey === "anthropic" ? "claude" : `claude (${authKey})`;
-		const displayName = profile.email ? `claude (${profile.email})` : baseName;
-		return { provider: "anthropic", displayName, windows, plan: profile.plan };
+		return { provider: "anthropic", displayName: "claude", windows, plan: profile.plan, email: profile.email };
 	} catch (e) {
-		const baseName = authKey === "anthropic" ? "claude" : `claude (${authKey})`;
-		return { provider: "anthropic", displayName: baseName, windows: [], error: String(e) };
+		return { provider: "anthropic", displayName: "claude", windows: [], error: String(e) };
 	}
 }
 
@@ -333,12 +330,10 @@ async function fetchCodexProfileAndUsage(accessToken: string, accountId: string 
 		]);
 		clearTimeout(timer);
 		if (res.status === 401 || res.status === 403) {
-			const baseName = authKey === "openai-codex" ? "codex" : `codex (${authKey})`;
-			return { provider: "codex", displayName: codexEmail ? `codex (${codexEmail})` : baseName, windows: [], error: "token expired" };
+			return { provider: "codex", displayName: "codex", windows: [], error: "token expired", email: codexEmail };
 		}
 		if (!res.ok) {
-			const baseName = authKey === "openai-codex" ? "codex" : `codex (${authKey})`;
-			return { provider: "codex", displayName: codexEmail ? `codex (${codexEmail})` : baseName, windows: [], error: `http ${res.status}` };
+			return { provider: "codex", displayName: "codex", windows: [], error: `http ${res.status}`, email: codexEmail };
 		}
 		const data = await res.json() as any;
 		const windows: RateWindow[] = [];
@@ -369,12 +364,9 @@ async function fetchCodexProfileAndUsage(accessToken: string, accountId: string 
 			plan = plan ? `${plan} ($${balance.toFixed(2)})` : `$${balance.toFixed(2)}`;
 		}
 		if (codexEmail) cacheEmail(authKey, codexEmail);
-		const baseName = authKey === "openai-codex" ? "codex" : `codex (${authKey})`;
-		const displayName = codexEmail ? `codex (${codexEmail})` : baseName;
-		return { provider: "codex", displayName, windows, plan };
+		return { provider: "codex", displayName: "codex", windows, plan, email: codexEmail };
 	} catch (e) {
-		const baseName = authKey === "openai-codex" ? "codex" : `codex (${authKey})`;
-		return { provider: "codex", displayName: baseName, windows: [], error: String(e) };
+		return { provider: "codex", displayName: "codex", windows: [], error: String(e) };
 	}
 }
 async function fetchZaiUsage(): Promise<UsageSnapshot[]> {
@@ -427,13 +419,11 @@ async function fetchZaiProfileAndUsage(apiKey: string, authKey: string = "zai"):
 		});
 		clearTimeout(timer);
 		if (!res.ok) {
-			const baseName = authKey === "zai" ? "z.ai" : `z.ai (${authKey})`;
-			return { provider: "zai", displayName: baseName, windows: [], error: `http ${res.status}` };
+			return { provider: "zai", displayName: "z.ai", windows: [], error: `http ${res.status}` };
 		}
 		const data = await res.json() as any;
 		if (!data.success || data.code !== 200) {
-			const baseName = authKey === "zai" ? "z.ai" : `z.ai (${authKey})`;
-			return { provider: "zai", displayName: baseName, windows: [], error: data.msg || "api error" };
+			return { provider: "zai", displayName: "z.ai", windows: [], error: data.msg || "api error" };
 		}
 		const windows: RateWindow[] = [];
 		const limits = data.data?.limits || [];
@@ -465,14 +455,12 @@ async function fetchZaiProfileAndUsage(apiKey: string, authKey: string = "zai"):
 			}
 		}
 		const planName = data.data?.planName || data.data?.plan || undefined;
-		const baseName = authKey === "zai" ? "z.ai" : `z.ai (${authKey})`;
 		if (windows.length === 0 && planName) {
-			return { provider: "zai", displayName: `z.ai (${planName})`, windows, plan: planName };
+			return { provider: "zai", displayName: "z.ai", windows, plan: planName };
 		}
-		return { provider: "zai", displayName: baseName, windows, plan: planName };
+		return { provider: "zai", displayName: "z.ai", windows, plan: planName };
 	} catch (e) {
-		const baseName = authKey === "zai" ? "z.ai" : `z.ai (${authKey})`;
-		return { provider: "zai", displayName: baseName, windows: [], error: String(e) };
+		return { provider: "zai", displayName: "z.ai", windows: [], error: String(e) };
 	}
 }
 function formatReset(date: Date): string {
@@ -490,7 +478,7 @@ function formatReset(date: Date): string {
 function getStatusIndicator(status?: ProviderStatus): string {
 	if (!status) return "";
 	switch (status.indicator) {
-		case "none": return "[ok]";
+		case "none": return "";
 		case "minor": return "[!]";
 		case "major": return "[!!]";
 		case "critical": return "[!!!]";
@@ -655,15 +643,15 @@ class UsageComponent {
 				const isCursor = isSelectable && this.selectableIndices[this.cursor] === i;
 				const statusIndicator = getStatusIndicator(u.status);
 				const planStr = u.plan ? dim(` (${u.plan})`) : "";
+				const emailStr = u.email ? dim(` ${u.email}`) : "";
 				const statusStr = statusIndicator ? ` ${statusIndicator}` : "";
 				let radioStr = "";
 				if (u.selected) {
-					radioStr = ` ${accent("●")}`;
+					radioStr = accent("●");
 				} else if (isSelectable) {
-					const pointer = isCursor ? accent("› ") : "  ";
-					radioStr = ` ${pointer}${dim("○")}`;
+					radioStr = `${dim("○")}${isCursor ? accent(" ←") : ""}`;
 				}
-				lines.push(box(bold(u.displayName) + planStr + statusStr + radioStr));
+				lines.push(box(bold(u.displayName) + planStr + emailStr + statusStr + " " + radioStr));
 				if (u.status?.indicator && u.status.indicator !== "none" && u.status.indicator !== "unknown" && u.status.description) {
 					const desc = u.status.description.length > 40
 						? u.status.description.substring(0, 37).toLowerCase() + "..."
