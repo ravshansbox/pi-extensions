@@ -22,6 +22,7 @@ interface UsageSnapshot {
 	error?: string;
 	status?: ProviderStatus;
 	selected?: boolean;
+	authKey?: string;
 }
 const FETCH_TIMEOUT_MS = 10000;
 const USAGE_RACE_TIMEOUT_MS = 15000;
@@ -37,8 +38,9 @@ async function fetchProviderStatus(provider: string): Promise<ProviderStatus> {
 	if (!url) return { indicator: "none" };
 	try {
 		const controller = new AbortController();
-		setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+		const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 		const res = await fetch(url, { signal: controller.signal });
+		clearTimeout(timer);
 		if (!res.ok) return { indicator: "unknown" };
 		const data = await res.json() as any;
 		const indicator = data.status?.indicator || "none";
@@ -83,7 +85,7 @@ interface ClaudeProfile {
 async function fetchClaudeProfile(token: string): Promise<ClaudeProfile> {
 	try {
 		const controller = new AbortController();
-		setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+		const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 		const res = await fetch("https://api.anthropic.com/api/oauth/profile", {
 			method: "GET",
 			headers: {
@@ -91,6 +93,7 @@ async function fetchClaudeProfile(token: string): Promise<ClaudeProfile> {
 			},
 			signal: controller.signal,
 		});
+		clearTimeout(timer);
 		if (!res.ok) return {};
 		const data = await res.json() as any;
 		let plan: string | undefined;
@@ -146,6 +149,7 @@ async function fetchClaudeUsage(): Promise<UsageSnapshot[]> {
 		const snapshot = await fetchClaudeProfileAndUsage(entry.access, key);
 		if (snapshot) {
 			snapshot.selected = key === selectedKey;
+			snapshot.authKey = key;
 			snapshots.push(snapshot);
 		}
 	}
@@ -160,7 +164,7 @@ async function fetchClaudeUsage(): Promise<UsageSnapshot[]> {
 async function fetchClaudeProfileAndUsage(token: string, authKey: string = "anthropic"): Promise<UsageSnapshot | null> {
 	try {
 		const controller = new AbortController();
-		setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+		const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 		const [usageRes, profile] = await Promise.all([
 			fetch("https://api.anthropic.com/api/oauth/usage", {
 				headers: {
@@ -171,6 +175,7 @@ async function fetchClaudeProfileAndUsage(token: string, authKey: string = "anth
 			}),
 			fetchClaudeProfile(token),
 		]);
+		clearTimeout(timer);
 		const res = usageRes;
 		if (!res.ok) {
 			const baseName = authKey === "anthropic" ? "claude" : `claude (${authKey})`;
@@ -211,7 +216,7 @@ async function fetchClaudeProfileAndUsage(token: string, authKey: string = "anth
 async function fetchCodexProfileEmail(accessToken: string): Promise<string | undefined> {
 	try {
 		const controller = new AbortController();
-		setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+		const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 		const res = await fetch("https://api.openai.com/v1/me", {
 			method: "GET",
 			headers: {
@@ -219,6 +224,7 @@ async function fetchCodexProfileEmail(accessToken: string): Promise<string | und
 			},
 			signal: controller.signal,
 		});
+		clearTimeout(timer);
 		if (!res.ok) return undefined;
 		const data = await res.json() as any;
 		return data?.email || undefined;
@@ -238,9 +244,6 @@ function loadCodexCachedEmailForKey(authKey: string): string | undefined {
 	return undefined;
 }
 
-function loadCodexCachedEmail(): string | undefined {
-	return loadCodexCachedEmailForKey("openai-codex");
-}
 async function fetchCodexUsage(modelRegistry: any): Promise<UsageSnapshot[]> {
 	const authData = loadAuthData();
 	const codexKeys = getAuthEntriesForProvider(authData, "openai-codex");
@@ -283,6 +286,7 @@ async function fetchCodexUsage(modelRegistry: any): Promise<UsageSnapshot[]> {
 		if (accessToken) {
 			const snapshot = await fetchCodexProfileAndUsage(accessToken, accountId, "openai-codex");
 			snapshot.selected = true;
+			snapshot.authKey = "openai-codex";
 			snapshots.push(snapshot);
 		}
 	}
@@ -294,6 +298,7 @@ async function fetchCodexUsage(modelRegistry: any): Promise<UsageSnapshot[]> {
 		
 		const snapshot = await fetchCodexProfileAndUsage(entry.access, entry.accountId, key);
 		snapshot.selected = key === selectedKey;
+		snapshot.authKey = key;
 		snapshots.push(snapshot);
 	}
 	
@@ -307,7 +312,7 @@ async function fetchCodexUsage(modelRegistry: any): Promise<UsageSnapshot[]> {
 async function fetchCodexProfileAndUsage(accessToken: string, accountId: string | undefined, authKey: string = "openai-codex"): Promise<UsageSnapshot> {
 	try {
 		const controller = new AbortController();
-		setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+		const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 		const headers: Record<string, string> = {
 			Authorization: `Bearer ${accessToken}`,
 			"User-Agent": "CodexBar",
@@ -325,6 +330,7 @@ async function fetchCodexProfileAndUsage(accessToken: string, accountId: string 
 			}),
 			cachedEmail ? Promise.resolve(cachedEmail) : fetchCodexProfileEmail(accessToken),
 		]);
+		clearTimeout(timer);
 		if (res.status === 401 || res.status === 403) {
 			const baseName = authKey === "openai-codex" ? "codex" : `codex (${authKey})`;
 			return { provider: "codex", displayName: codexEmail ? `codex (${codexEmail})` : baseName, windows: [], error: "token expired" };
@@ -385,6 +391,7 @@ async function fetchZaiUsage(): Promise<UsageSnapshot[]> {
 	if (zaiKeys.length === 0 && envApiKey) {
 		const snapshot = await fetchZaiProfileAndUsage(envApiKey);
 		snapshot.selected = true;
+		snapshot.authKey = "zai";
 		snapshots.push(snapshot);
 	}
 	
@@ -395,6 +402,7 @@ async function fetchZaiUsage(): Promise<UsageSnapshot[]> {
 		
 		const snapshot = await fetchZaiProfileAndUsage(entry.key, key);
 		snapshot.selected = key === selectedKey;
+		snapshot.authKey = key;
 		snapshots.push(snapshot);
 	}
 	
@@ -408,7 +416,7 @@ async function fetchZaiUsage(): Promise<UsageSnapshot[]> {
 async function fetchZaiProfileAndUsage(apiKey: string, authKey: string = "zai"): Promise<UsageSnapshot> {
 	try {
 		const controller = new AbortController();
-		setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+		const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 		const res = await fetch("https://api.z.ai/api/monitor/usage/quota/limit", {
 			method: "GET",
 			headers: {
@@ -417,6 +425,7 @@ async function fetchZaiProfileAndUsage(apiKey: string, authKey: string = "zai"):
 			},
 			signal: controller.signal,
 		});
+		clearTimeout(timer);
 		if (!res.ok) {
 			const baseName = authKey === "zai" ? "z.ai" : `z.ai (${authKey})`;
 			return { provider: "zai", displayName: baseName, windows: [], error: `http ${res.status}` };
@@ -484,17 +493,48 @@ function getStatusIndicator(status?: ProviderStatus): string {
 		default: return "";
 	}
 }
+function reorganizeKeys(auth: Record<string, any>, selectedKey: string, prefix: string): Record<string, any> {
+	const result = { ...auth };
+	const providerKeys = Object.keys(result).filter(k => k === prefix || k.startsWith(prefix + "-"));
+	for (const key of providerKeys) {
+		delete result[key];
+	}
+	const selectedAuth = auth[selectedKey];
+	if (selectedAuth) {
+		result[prefix] = selectedAuth;
+	}
+	let counter = 1;
+	for (const [key, value] of Object.entries(auth)) {
+		if ((key === prefix || key.startsWith(prefix + "-")) && key !== selectedKey) {
+			result[`${prefix}-${counter}`] = value;
+			counter++;
+		}
+	}
+	return result;
+}
+function getAuthPath(): string {
+	return path.join(os.homedir(), ".pi", "agent", "auth.json");
+}
+function saveAuth(auth: Record<string, any>): void {
+	fs.writeFileSync(getAuthPath(), JSON.stringify(auth, null, 2));
+}
 class UsageComponent {
 	private usages: UsageSnapshot[] = [];
 	private loading = true;
 	private tui: { requestRender: () => void };
 	private theme: any;
 	private onClose: () => void;
+	private reloadFn: () => Promise<void>;
 	private modelRegistry: any;
-	constructor(tui: { requestRender: () => void }, theme: any, onClose: () => void, modelRegistry: any) {
+	private cursor = 0;
+	private selectableIndices: number[] = [];
+	private switching = false;
+	private providerGroups = new Map<string, number[]>();
+	constructor(tui: { requestRender: () => void }, theme: any, onClose: () => void, reloadFn: () => Promise<void>, modelRegistry: any) {
 		this.tui = tui;
 		this.theme = theme;
 		this.onClose = onClose;
+		this.reloadFn = reloadFn;
 		this.modelRegistry = modelRegistry;
 		this.load();
 	}
@@ -508,23 +548,72 @@ class UsageComponent {
 			timeout(fetchProviderStatus("anthropic"), STATUS_RACE_TIMEOUT_MS, { indicator: "unknown" as const }),
 			timeout(fetchProviderStatus("codex"), STATUS_RACE_TIMEOUT_MS, { indicator: "unknown" as const }),
 		]);
-		
-		// Add status to each snapshot
 		for (const s of claudeSnapshots) s.status = claudeStatus;
 		for (const s of codexSnapshots) s.status = codexStatus;
-		
 		const allUsages = [...claudeSnapshots, ...codexSnapshots, ...zaiSnapshots];
 		this.usages = allUsages.filter(u =>
 			u.windows.length > 0 ||
 			u.plan ||
 			(u.error !== "no api key" && u.error !== "no credentials" && u.error !== "no token")
 		);
+		this.selectableIndices = [];
+		this.providerGroups = new Map<string, number[]>();
+		for (let i = 0; i < this.usages.length; i++) {
+			const p = this.usages[i].provider;
+			if (!this.providerGroups.has(p)) this.providerGroups.set(p, []);
+			this.providerGroups.get(p)!.push(i);
+		}
+		for (const indices of this.providerGroups.values()) {
+			if (indices.length > 1) {
+				for (const idx of indices) {
+					if (!this.usages[idx].selected) {
+						this.selectableIndices.push(idx);
+					}
+				}
+			}
+		}
+		if (this.selectableIndices.length > 0) {
+			this.cursor = 0;
+		}
 		this.loading = false;
 		this.tui.requestRender();
+	}
+	private async switchAccount(usage: UsageSnapshot) {
+		if (!usage.authKey) return;
+		this.switching = true;
+		this.tui.requestRender();
+		const prefix = usage.provider === "anthropic" ? "anthropic"
+			: usage.provider === "codex" ? "openai-codex"
+			: usage.provider === "zai" ? "zai" : usage.provider;
+		const auth = loadAuthData();
+		const updated = reorganizeKeys(auth, usage.authKey, prefix);
+		saveAuth(updated);
+		await this.reloadFn();
+		this.switching = false;
+		this.onClose();
 	}
 	handleInput(data: string): void {
 		if (matchesKey(data, "escape")) {
 			this.onClose();
+			return;
+		}
+		if (this.selectableIndices.length === 0) return;
+		if (matchesKey(data, "up") || matchesKey(data, "k")) {
+			if (this.cursor > 0) {
+				this.cursor--;
+				this.tui.requestRender();
+			}
+		} else if (matchesKey(data, "down") || matchesKey(data, "j")) {
+			if (this.cursor < this.selectableIndices.length - 1) {
+				this.cursor++;
+				this.tui.requestRender();
+			}
+		} else if (matchesKey(data, "enter")) {
+			const idx = this.selectableIndices[this.cursor];
+			const usage = this.usages[idx];
+			if (!usage.selected) {
+				this.switchAccount(usage);
+			}
 		}
 	}
 	invalidate(): void {}
@@ -545,15 +634,26 @@ class UsageComponent {
 		lines.push(dim(`╭${hLine}╮`));
 		lines.push(box(bold(accent("usage"))));
 		lines.push(dim(`├${hLine}┤`));
-		if (this.loading) {
-			lines.push(box("loading..."));
+		if (this.loading || this.switching) {
+			lines.push(box(this.switching ? "switching..." : "loading..."));
 		} else {
-			for (const u of this.usages) {
+			for (let i = 0; i < this.usages.length; i++) {
+				const u = this.usages[i];
+				const isSelectable = this.selectableIndices.includes(i);
+				const isCursor = isSelectable && this.selectableIndices[this.cursor] === i;
 				const statusIndicator = getStatusIndicator(u.status);
 				const planStr = u.plan ? dim(` (${u.plan})`) : "";
 				const statusStr = statusIndicator ? ` ${statusIndicator}` : "";
-				const selectedStr = u.selected ? accent(" ●") : "";
-				lines.push(box(bold(u.displayName) + planStr + statusStr + selectedStr));
+				let radioStr = "";
+				const providerGroup = this.providerGroups.get(u.provider);
+				const hasMultiple = providerGroup && providerGroup.length > 1;
+				if (hasMultiple && u.selected) {
+					radioStr = ` ${accent("●")}`;
+				} else if (isSelectable && !u.selected) {
+					const pointer = isCursor ? accent("› ") : "  ";
+					radioStr = ` ${pointer}${dim("○")}`;
+				}
+				lines.push(box(bold(u.displayName) + planStr + statusStr + radioStr));
 				if (u.status?.indicator && u.status.indicator !== "none" && u.status.indicator !== "unknown" && u.status.description) {
 					const desc = u.status.description.length > 40
 						? u.status.description.substring(0, 37).toLowerCase() + "..."
@@ -580,7 +680,10 @@ class UsageComponent {
 			}
 		}
 		lines.push(dim(`├${hLine}┤`));
-		lines.push(box(dim("press esc to close")));
+		const hint = this.selectableIndices.length > 0
+			? "↑↓ navigate  enter switch  esc close"
+			: "press esc to close";
+		lines.push(box(dim(hint)));
 		lines.push(dim(`╰${hLine}╯`));
 		return lines;
 	}
@@ -596,7 +699,7 @@ export default function (pi: ExtensionAPI) {
 			}
 			const modelRegistry = ctx.modelRegistry;
 			await ctx.ui.custom((tui, theme, _kb, done) => {
-				return new UsageComponent(tui, theme, () => done(), modelRegistry);
+				return new UsageComponent(tui, theme, () => done(), () => ctx.reload(), modelRegistry);
 			});
 		},
 	});

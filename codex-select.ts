@@ -94,34 +94,6 @@ async function fetchCodexUsage(accessToken: string, accountId?: string): Promise
 	}
 }
 
-async function fetchAccountEmail(accountId: string, accessToken?: string): Promise<string | null> {
-	try {
-		const controller = new AbortController();
-		const timeout = setTimeout(() => controller.abort(), 5000);
-		const headers: Record<string, string> = {
-			Authorization: `Bearer ${accessToken}`,
-			"User-Agent": "CodexBar",
-			Accept: "application/json",
-		};
-		if (accountId) {
-			headers["ChatGPT-Account-Id"] = accountId;
-		}
-		const res = await fetch("https://chatgpt.com/backend-api/wham/profile", {
-			method: "GET",
-			headers,
-			signal: controller.signal,
-		});
-		clearTimeout(timeout);
-		if (!res.ok) {
-			return null;
-		}
-		const profile = await res.json();
-		return profile?.account?.email || null;
-	} catch (error) {
-		return null;
-	}
-}
-
 async function fetchCodexProfile(accessToken: string, accountId?: string): Promise<ProfileInfo | null> {
 	try {
 		const controller = new AbortController();
@@ -434,21 +406,6 @@ export default function (pi: ExtensionAPI) {
 					}
 				}
 
-				// For accounts without emails, try to get them from other sources
-				for (const [key, entry] of uniqueEntries) {
-					const profile = profileMap.get(key);
-					const email = await tryGetAccountEmail(entry);
-					if (email && !profile?.account?.email) {
-						profileMap.set(key, {
-							account: {
-								email,
-								full_name: profile?.account?.full_name,
-								uuid: profile?.account?.uuid,
-							}
-						});
-					}
-				}
-
 				// Build label to key mapping for easy lookup
 				const labelToKey = new Map<string, string>();
 				const items = uniqueEntries.map(([key, entry]) => {
@@ -501,14 +458,9 @@ export default function (pi: ExtensionAPI) {
 								: parseFloat(newUsage.credits.balance) || 0;
 							parts.push(`$${balance.toFixed(2)}`);
 						}
-						const email = newProfile.account?.email || newProfile.account?.full_name;
+						let email: string | undefined = newProfile.account?.email || newProfile.account?.full_name;
 						if (!email) {
-							const accountEmail = await tryGetAccountEmail(newCodexAuth);
-							if (accountEmail) {
-								email = accountEmail;
-							} else {
-								email = "Codex";
-							}
+							email = await tryGetAccountEmail(newCodexAuth) || "Codex";
 						}
 						const line = `${email} • ${parts.join(" • ")}`;
 						ctx.ui.setWidget("codex-usage", [line]);
@@ -553,7 +505,7 @@ function reorganizeKeys(auth: AuthJson, selectedKey: string): AuthJson {
 
 async function updateUsageWidget(ctx: any, pi: ExtensionAPI): Promise<void> {
 	try {
-		if (!ctx.model || !ctx.model.provider?.includes("codex") && !ctx.model.provider?.includes("openai")) {
+		if (!ctx.model || (!ctx.model.provider?.includes("codex") && !ctx.model.provider?.includes("openai"))) {
 			return;
 		}
 		const auth = loadAuth();

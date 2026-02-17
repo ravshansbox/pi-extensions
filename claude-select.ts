@@ -97,18 +97,6 @@ function saveAuth(auth: AuthJson): void {
 	const authPath = getAuthPath();
 	fs.writeFileSync(authPath, JSON.stringify(auth, null, 2));
 }
-function formatTokens(tokens: number): string {
-	if (tokens >= 1_000_000) {
-		return `${(tokens / 1_000_000).toFixed(1)}M`;
-	} else if (tokens >= 1_000) {
-		return `${(tokens / 1_000).toFixed(0)}K`;
-	}
-	return String(tokens);
-}
-function getUsagePercent(used: number, total: number): number {
-	if (total === 0) return 0;
-	return Math.round((used / total) * 100);
-}
 function reorganizeKeys(auth: AuthJson, selectedKey: string): AuthJson {
 	const result = { ...auth };
 	const anthropicKeys = Object.keys(result).filter((k) => k.startsWith("anthropic"));
@@ -134,11 +122,6 @@ function reorganizeKeys(auth: AuthJson, selectedKey: string): AuthJson {
 	return result;
 }
 
-function getProgressBar(utilization: number): string {
-	const filled = Math.round(utilization / 10);
-	const empty = 10 - filled;
-	return `[${"█".repeat(filled)}${"░".repeat(empty)}]`;
-}
 function getUrgencyScore(quota?: QuotaInfo): number {
 	if (!quota) return 0;
 	let maxUrgency = 0;
@@ -177,7 +160,7 @@ function getUsageWarning(quota?: QuotaInfo): string {
 	}
 	return warning;
 }
-function getEntryLabel(key: string, entry: AuthEntry, quota?: QuotaInfo, profile?: ProfileInfo, isBest?: boolean, isSelected?: boolean): string {
+function getEntryLabel(key: string, entry: AuthEntry, quota?: QuotaInfo, profile?: ProfileInfo, isBest?: boolean): string {
 	let label = profile?.account?.email || key;
 	const warning = getUsageWarning(quota);
 	if (warning) {
@@ -302,8 +285,6 @@ export default function (pi: ExtensionAPI) {
 				}
 				const updated = reorganizeKeys(auth, selectedKey);
 				saveAuth(updated);
-				const newAuth = loadAuth();
-
 				await ctx.reload();
 				const selectedEntry = anthropicEntries[selectedKey];
 				const selectedProfile = profileMap.get(selectedKey);

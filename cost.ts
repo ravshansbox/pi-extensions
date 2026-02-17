@@ -115,7 +115,7 @@ function formatProviderName(provider: string): string {
 	};
 	return names[provider] || provider;
 }
-function deleteProviderFromSessions(provider: string): void {
+async function deleteProviderFromSessions(provider: string): Promise<void> {
 	const sessionsDir = path.join(os.homedir(), ".pi", "agent", "sessions");
 	if (!fs.existsSync(sessionsDir)) return;
 	const sessionDirs = fs.readdirSync(sessionsDir, { withFileTypes: true })
@@ -126,22 +126,29 @@ function deleteProviderFromSessions(provider: string): void {
 			.filter(f => f.endsWith('.jsonl'))
 			.map(f => path.join(dir, f));
 		for (const file of files) {
-			const content = fs.readFileSync(file, "utf-8");
-			const lines = content.split('\n').filter(line => {
-				if (!line.trim()) return false;
+			const fileStream = fs.createReadStream(file);
+			const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
+			const kept: string[] = [];
+			let modified = false;
+			for await (const line of rl) {
+				if (!line.trim()) continue;
 				try {
 					const entry = JSON.parse(line);
 					if (entry.type === "message" && entry.message?.role === "assistant") {
-						const msg = entry.message;
-						const msgProvider = msg.provider || "unknown";
-						if (msgProvider === provider) return false;
+						const msgProvider = entry.message.provider || "unknown";
+						if (msgProvider === provider) {
+							modified = true;
+							continue;
+						}
 					}
-					return true;
+					kept.push(line);
 				} catch {
-					return true;
+					kept.push(line);
 				}
-			});
-			fs.writeFileSync(file, lines.join('\n') + '\n');
+			}
+			if (modified) {
+				await fs.promises.writeFile(file, kept.join('\n') + '\n');
+			}
 		}
 	}
 }
@@ -186,16 +193,14 @@ class CostComponent {
 				this.tui.requestRender();
 			}
 		} else if (matchesKey(data, Key.backspace)) {
-			if (this.costs.length > 0) {
+			if (this.costs.length > 0 && !this.loading) {
 				const pc = this.costs[this.cursor];
-				deleteProviderFromSessions(pc.provider);
 				this.costs.splice(this.cursor, 1);
-				if (this.costs.length === 0) {
-					this.cursor = 0;
-				} else if (this.cursor >= this.costs.length) {
-					this.cursor = this.costs.length - 1;
+				if (this.cursor >= this.costs.length) {
+					this.cursor = Math.max(0, this.costs.length - 1);
 				}
 				this.tui.requestRender();
+				deleteProviderFromSessions(pc.provider);
 			}
 		}
 	}

@@ -38,7 +38,7 @@ export default function (pi: ExtensionAPI) {
 		if (output <= 0) return;
 		const elapsedSeconds = elapsedMs / 1000;
 		const tokensPerSecond = output / elapsedSeconds;
-		const message = `${tokensPerSecond.toFixed(1)} tok/s ↑${fmt(output)} ↓${fmt(input)} R${fmt(cacheRead)} W${fmt(cacheWrite)} ${elapsedSeconds.toFixed(1)}s`;
-		ctx.ui.notify(message, "info");
+		const msg = `${tokensPerSecond.toFixed(1)}tps D${elapsedSeconds.toFixed(1)}s ↑${fmt(output)} ↓${fmt(input)} R${fmt(cacheRead)} W${fmt(cacheWrite)}`;
+		ctx.ui.notify(msg, "info");
 	});
 }
