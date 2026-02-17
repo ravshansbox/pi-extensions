@@ -49,7 +49,8 @@ export default function (pi: ExtensionAPI) {
 			const entry = auth[provider];
 			if (entry?.email) login = entry.email;
 		} catch {}
-		const msg = `[${login}] ${tokensPerSecond.toFixed(1)}tps D${elapsedSeconds.toFixed(1)}s ↑${fmt(output)} ↓${fmt(input)} R${fmt(cacheRead)} W${fmt(cacheWrite)}`;
+		const label = login !== provider ? `${provider}, ${login}` : provider;
+		const msg = `${tokensPerSecond.toFixed(1)}tps D${elapsedSeconds.toFixed(1)}s ↑${fmt(output)} ↓${fmt(input)} R${fmt(cacheRead)} W${fmt(cacheWrite)} [${label}]`;
 		ctx.ui.notify(msg, "info");
 	});
 }
