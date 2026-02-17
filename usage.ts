@@ -451,7 +451,7 @@ async function fetchZaiProfileAndUsage(apiKey: string, authKey: string = "zai"):
 				});
 			} else if (type === "TIME_LIMIT") {
 				windows.push({
-					label: "monthly",
+					label: "month",
 					usedPercent: percent,
 					resetDescription: nextReset ? formatReset(nextReset) : undefined,
 				});
