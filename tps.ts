@@ -1,5 +1,8 @@
 import type { AssistantMessage } from "@mariozechner/pi-ai";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import * as os from "node:os";
 function isAssistantMessage(message: unknown): message is AssistantMessage {
 	if (!message || typeof message !== "object") return false;
 	const role = (message as { role?: unknown }).role;
@@ -38,7 +41,15 @@ export default function (pi: ExtensionAPI) {
 		if (output <= 0) return;
 		const elapsedSeconds = elapsedMs / 1000;
 		const tokensPerSecond = output / elapsedSeconds;
-		const msg = `${tokensPerSecond.toFixed(1)}tps D${elapsedSeconds.toFixed(1)}s ↑${fmt(output)} ↓${fmt(input)} R${fmt(cacheRead)} W${fmt(cacheWrite)}`;
+		const provider = ctx.model?.provider ?? "?";
+		let login = provider;
+		try {
+			const authPath = path.join(os.homedir(), ".pi", "agent", "auth.json");
+			const auth = JSON.parse(fs.readFileSync(authPath, "utf-8"));
+			const entry = auth[provider];
+			if (entry?.email) login = entry.email;
+		} catch {}
+		const msg = `[${login}] ${tokensPerSecond.toFixed(1)}tps D${elapsedSeconds.toFixed(1)}s ↑${fmt(output)} ↓${fmt(input)} R${fmt(cacheRead)} W${fmt(cacheWrite)}`;
 		ctx.ui.notify(msg, "info");
 	});
 }

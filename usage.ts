@@ -204,6 +204,7 @@ async function fetchClaudeProfileAndUsage(token: string, authKey: string = "anth
 				usedPercent: modelWindow.utilization,
 			});
 		}
+		if (profile.email) cacheEmail(authKey, profile.email);
 		const baseName = authKey === "anthropic" ? "claude" : `claude (${authKey})`;
 		const displayName = profile.email ? `claude (${profile.email})` : baseName;
 		return { provider: "anthropic", displayName, windows, plan: profile.plan };
@@ -367,6 +368,7 @@ async function fetchCodexProfileAndUsage(accessToken: string, accountId: string 
 				: parseFloat(data.credits.balance) || 0;
 			plan = plan ? `${plan} ($${balance.toFixed(2)})` : `$${balance.toFixed(2)}`;
 		}
+		if (codexEmail) cacheEmail(authKey, codexEmail);
 		const baseName = authKey === "openai-codex" ? "codex" : `codex (${authKey})`;
 		const displayName = codexEmail ? `codex (${codexEmail})` : baseName;
 		return { provider: "codex", displayName, windows, plan };
@@ -520,6 +522,15 @@ function getAuthPath(): string {
 }
 function saveAuth(auth: Record<string, any>): void {
 	fs.writeFileSync(getAuthPath(), JSON.stringify(auth, null, 2));
+}
+function cacheEmail(authKey: string, email: string): void {
+	try {
+		const auth = loadAuthData();
+		if (auth[authKey] && auth[authKey].email !== email) {
+			auth[authKey].email = email;
+			saveAuth(auth);
+		}
+	} catch {}
 }
 class UsageComponent {
 	private usages: UsageSnapshot[] = [];
