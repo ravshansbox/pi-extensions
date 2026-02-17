@@ -645,11 +645,9 @@ class UsageComponent {
 				const planStr = u.plan ? dim(` (${u.plan})`) : "";
 				const statusStr = statusIndicator ? ` ${statusIndicator}` : "";
 				let radioStr = "";
-				const providerGroup = this.providerGroups.get(u.provider);
-				const hasMultiple = providerGroup && providerGroup.length > 1;
-				if (hasMultiple && u.selected) {
+				if (u.selected) {
 					radioStr = ` ${accent("●")}`;
-				} else if (isSelectable && !u.selected) {
+				} else if (isSelectable) {
 					const pointer = isCursor ? accent("› ") : "  ";
 					radioStr = ` ${pointer}${dim("○")}`;
 				}
