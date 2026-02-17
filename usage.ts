@@ -354,10 +354,8 @@ async function fetchCodexProfileAndUsage(accessToken: string, accountId: string 
 		if (data.rate_limit?.secondary_window) {
 			const sw = data.rate_limit.secondary_window;
 			const resetDate = sw.reset_at ? new Date(sw.reset_at * 1000) : undefined;
-			const windowHours = Math.round((sw.limit_window_seconds || 86400) / 3600);
-			const label = windowHours >= 24 ? "day" : `${windowHours}h`;
 			windows.push({
-				label,
+				label: "week",
 				usedPercent: sw.used_percent || 0,
 				resetDescription: resetDate ? formatReset(resetDate) : undefined,
 			});
