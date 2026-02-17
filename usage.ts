@@ -524,17 +524,15 @@ class UsageComponent {
 	private tui: { requestRender: () => void };
 	private theme: any;
 	private onClose: () => void;
-	private reloadFn: () => Promise<void>;
 	private modelRegistry: any;
 	private cursor = 0;
 	private selectableIndices: number[] = [];
 	private switching = false;
 	private providerGroups = new Map<string, number[]>();
-	constructor(tui: { requestRender: () => void }, theme: any, onClose: () => void, reloadFn: () => Promise<void>, modelRegistry: any) {
+	constructor(tui: { requestRender: () => void }, theme: any, onClose: () => void, modelRegistry: any) {
 		this.tui = tui;
 		this.theme = theme;
 		this.onClose = onClose;
-		this.reloadFn = reloadFn;
 		this.modelRegistry = modelRegistry;
 		this.load();
 	}
@@ -588,7 +586,7 @@ class UsageComponent {
 		const auth = loadAuthData();
 		const updated = reorganizeKeys(auth, usage.authKey, prefix);
 		saveAuth(updated);
-		await this.reloadFn();
+		this.modelRegistry.authStorage.reload();
 		this.switching = false;
 		this.onClose();
 	}
@@ -697,7 +695,7 @@ export default function (pi: ExtensionAPI) {
 			}
 			const modelRegistry = ctx.modelRegistry;
 			await ctx.ui.custom((tui, theme, _kb, done) => {
-				return new UsageComponent(tui, theme, () => done(), () => ctx.reload(), modelRegistry);
+				return new UsageComponent(tui, theme, () => done(), modelRegistry);
 			});
 		},
 	});
