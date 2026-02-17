@@ -435,7 +435,12 @@ async function fetchZaiProfileAndUsage(apiKey: string, authKey: string = "zai"):
 		}
 		const windows: RateWindow[] = [];
 		const limits = data.data?.limits || [];
-		for (const limit of limits) {
+		const sortedLimits = [...limits].sort((a: any, b: any) => {
+			if (a.type === "TOKENS_LIMIT" && b.type !== "TOKENS_LIMIT") return -1;
+			if (a.type !== "TOKENS_LIMIT" && b.type === "TOKENS_LIMIT") return 1;
+			return 0;
+		});
+		for (const limit of sortedLimits) {
 			const type = limit.type;
 			const percent = limit.percentage || 0;
 			const nextReset = limit.nextResetTime ? new Date(limit.nextResetTime) : undefined;
