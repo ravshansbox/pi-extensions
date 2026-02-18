@@ -51,7 +51,7 @@ export default function (pi: ExtensionAPI) {
 		} catch {}
 		const label = login !== provider ? `${provider}, ${login}` : provider;
 		const price = cost >= 0.01 ? `$${cost.toFixed(2)}` : `$${cost.toFixed(4)}`;
-		const msg = `↑${fmt(output)} ↓${fmt(input)} R${fmt(cacheRead)} W${fmt(cacheWrite)} ${price} D${elapsedSeconds.toFixed(1)}s ${tokensPerSecond.toFixed(1)}tps [${label}]`;
+		const msg = `↑${fmt(input)} ↓${fmt(output)} R${fmt(cacheRead)} W${fmt(cacheWrite)} ${price} D${elapsedSeconds.toFixed(1)}s ${tokensPerSecond.toFixed(1)}tps [${label}]`;
 		ctx.ui.notify(msg, "info");
 	});
 }
