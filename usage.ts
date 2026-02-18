@@ -475,17 +475,6 @@ function formatReset(date: Date): string {
 	if (days < 7) return `${days}d ${hours % 24}h`;
 	return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(date);
 }
-function getStatusIndicator(status?: ProviderStatus): string {
-	if (!status) return "";
-	switch (status.indicator) {
-		case "none": return "";
-		case "minor": return "[!]";
-		case "major": return "[!!]";
-		case "critical": return "[!!!]";
-		case "maintenance": return "[maint]";
-		default: return "";
-	}
-}
 function reorganizeKeys(auth: Record<string, any>, selectedKey: string, prefix: string): Record<string, any> {
 	const result = { ...auth };
 	const providerKeys = Object.keys(result).filter(k => k === prefix || k.startsWith(prefix + "-"));
@@ -641,7 +630,7 @@ class UsageComponent {
 				const u = this.usages[i];
 				const isSelectable = this.selectableIndices.includes(i);
 				const isCursor = isSelectable && this.selectableIndices[this.cursor] === i;
-				const statusIndicator = getStatusIndicator(u.status);
+				const statusIndicator = u.status?.indicator && u.status.indicator !== "none" && u.status.indicator !== "unknown" ? `[${u.status.indicator}]` : "";
 				const planStr = u.plan ? dim(` (${u.plan})`) : "";
 				const emailStr = u.email ? dim(` ${u.email}`) : "";
 				const statusStr = statusIndicator ? ` ${statusIndicator}` : "";
