@@ -611,7 +611,7 @@ class UsageComponent {
 		const dim = (s: string) => t.fg("muted", s);
 		const bold = (s: string) => t.bold(s);
 		const accent = (s: string) => t.fg("accent", s);
-		const totalW = width - 4;
+		const totalW = width;
 		const innerW = totalW - 4;
 		const hLine = "─".repeat(totalW - 2);
 		const box = (content: string) => {

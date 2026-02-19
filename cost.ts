@@ -21,11 +21,16 @@ interface ProviderCost {
 	totalRequests: number;
 	models: Map<string, number>;
 }
-async function scanSessionLogs(daysBack: number = 30): Promise<ProviderCost[]> {
+async function scanSessionLogs(daysBack: number | null = 30): Promise<ProviderCost[]> {
 	const sessionsDir = path.join(os.homedir(), ".pi", "agent", "sessions");
 	const providerCosts = new Map<string, ProviderCost>();
 	const cutoffDate = new Date();
-	cutoffDate.setDate(cutoffDate.getDate() - daysBack);
+	if (daysBack !== null) {
+		cutoffDate.setDate(cutoffDate.getDate() - daysBack);
+	} else {
+		// For "all time", set cutoff to epoch so everything is included
+		cutoffDate.setTime(0);
+	}
 	if (!fs.existsSync(sessionsDir)) {
 		return [];
 	}
@@ -161,21 +166,41 @@ class CostComponent {
 	private daysBack: number;
 	private expanded: string | null = null;
 	private cursor: number = 0;
+	private currentTab: number = 0;
+	private tabs: { label: string; days: number | null }[] = [
+		{ label: "week", days: 7 },
+		{ label: "month", days: 30 },
+		{ label: "all", days: null },
+	];
 	constructor(tui: { requestRender: () => void }, theme: any, onClose: () => void, daysBack: number) {
 		this.tui = tui;
 		this.theme = theme;
 		this.onClose = onClose;
 		this.daysBack = daysBack;
+		// Set initial tab based on daysBack
+		this.currentTab = this.tabs.findIndex(t => t.days === daysBack);
+		if (this.currentTab === -1) this.currentTab = 0;
 		this.load();
 	}
 	private async load() {
-		this.costs = await scanSessionLogs(this.daysBack);
+		const days = this.tabs[this.currentTab].days;
+		this.costs = await scanSessionLogs(days);
 		this.loading = false;
 		this.tui.requestRender();
 	}
 	handleInput(data: string): void {
 		if (matchesKey(data, Key.escape)) {
 			this.onClose();
+		} else if (matchesKey(data, Key.left)) {
+			if (this.tabs.length > 1) {
+				this.currentTab = (this.currentTab - 1 + this.tabs.length) % this.tabs.length;
+				this.load();
+			}
+		} else if (matchesKey(data, Key.right)) {
+			if (this.tabs.length > 1) {
+				this.currentTab = (this.currentTab + 1) % this.tabs.length;
+				this.load();
+			}
 		} else if (matchesKey(data, Key.up)) {
 			if (this.costs.length > 0) {
 				this.cursor = (this.cursor - 1 + this.costs.length) % this.costs.length;
@@ -212,7 +237,7 @@ class CostComponent {
 		const accent = (s: string) => t.fg("accent", s);
 		const success = (s: string) => t.fg("success", s);
 		const warning = (s: string) => t.fg("warning", s);
-		const totalW = Math.min(65, width - 4);
+		const totalW = width;
 		const innerW = totalW - 4;
 		const hLine = "─".repeat(totalW - 2);
 		const box = (content: string) => {
@@ -222,7 +247,21 @@ class CostComponent {
 		};
 		const lines: string[] = [];
 		lines.push(dim(`╭${hLine}╮`));
-		lines.push(box(bold(accent(`cost (${this.daysBack} days)`))));
+		lines.push(box(bold(accent(`cost`))));
+
+		// Render tabs
+		const tabLine: string[] = [];
+		for (let i = 0; i < this.tabs.length; i++) {
+			const tab = this.tabs[i];
+			const isActive = i === this.currentTab;
+			const tabText = isActive ? bold(tab.label) : dim(tab.label);
+			tabLine.push(tabText);
+			if (i < this.tabs.length - 1) {
+				tabLine.push(dim("·"));
+			}
+		}
+		lines.push(box(tabLine.join(" ")));
+
 		lines.push(dim(`├${hLine}┤`));
 		if (this.loading) {
 			lines.push(box("scanning session logs..."));
@@ -245,15 +284,7 @@ class CostComponent {
 						const shortModel = model.length > 25 ? model.substring(0, 22) + "..." : model;
 						lines.push(box(dim(`    ${shortModel.toLowerCase()}: $${cost.toFixed(4)}`)));
 					}
-					const recentDays = pc.days
-						.sort((a, b) => b.date.localeCompare(a.date))
-						.slice(0, 5);
-					if (recentDays.length > 0) {
-						lines.push(box(dim("    recent:")));
-						for (const day of recentDays) {
-							lines.push(box(dim(`      ${day.date}: $${day.total.toFixed(4)} (${day.requests} req)`)));
-						}
-					}
+
 				}
 				idx++;
 			}
@@ -262,7 +293,7 @@ class CostComponent {
 			lines.push(box(`${bold("total:")} ${totalColor(`$${grandTotal.toFixed(4)}`)}`));
 		}
 		lines.push(dim(`├${hLine}┤`));
-		lines.push(box(dim("↑↓ navigate  enter expand  backspace hide  esc close")));
+		lines.push(box(dim("←→ tabs  ↑↓ navigate  enter expand  backspace delete  esc close")));
 		lines.push(dim(`╰${hLine}╯`));
 		return lines;
 	}
@@ -276,7 +307,7 @@ export default function (pi: ExtensionAPI) {
 				ctx.ui.notify("Cost report requires interactive mode", "error");
 				return;
 			}
-			const daysBack = parseInt(args || "30") || 30;
+			const daysBack = parseInt(args || "7") || 7;
 			await ctx.ui.custom((tui, theme, _kb, done) => {
 				return new CostComponent(tui, theme, () => done(undefined), daysBack);
 			});
