@@ -99,9 +99,9 @@ async function fetchClaudeProfile(token: string): Promise<ClaudeProfile> {
 		const data = await res.json() as any;
 		let plan: string | undefined;
 		if (data.account?.has_claude_max) {
-			plan = "claude max";
+			plan = "max";
 		} else if (data.account?.has_claude_pro) {
-			plan = "claude pro";
+			plan = "pro";
 		} else if (data.organization?.organization_type === "claude_team") {
 			plan = "team";
 		}
@@ -361,7 +361,9 @@ async function fetchCodexProfileAndUsage(accessToken: string, accountId: string 
 			const balance = typeof data.credits.balance === 'number'
 				? data.credits.balance
 				: parseFloat(data.credits.balance) || 0;
-			plan = plan ? `${plan} ($${balance.toFixed(2)})` : `$${balance.toFixed(2)}`;
+			if (balance > 0) {
+				plan = plan ? `${plan} ($${balance.toFixed(2)})` : `$${balance.toFixed(2)}`;
+			}
 		}
 		if (codexEmail) cacheEmail(authKey, codexEmail);
 		return { provider: "codex", displayName: "codex", windows, plan, email: codexEmail };

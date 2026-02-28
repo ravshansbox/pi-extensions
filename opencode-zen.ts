@@ -4,7 +4,7 @@ import {
 	streamSimpleOpenAICompletions,
 } from "@mariozechner/pi-ai";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-const PROVIDER_ID = "zen";
+const PROVIDER_ID = "opencode-zen";
 const BASE_URL = "https://opencode.ai/zen/v1";
 const DEFAULT_HEADERS: Record<string, string> = {
 	"HTTP-Referer": "https://opencode.ai/",
@@ -57,10 +57,13 @@ const FREE_MODELS = [
 		maxTokens: 128000,
 	},
 ];
-async function loginZen(_callbacks: OAuthLoginCallbacks): Promise<OAuthCredentials> {
+async function loginZen(callbacks: OAuthLoginCallbacks): Promise<OAuthCredentials> {
+	const key = (await callbacks.onPrompt({ message: "Paste OpenCode Zen API key:" })).trim();
+	if (!key) throw new Error("OpenCode Zen API key is required");
+	const cleaned = key.replace(/^Bearer\s+/i, "");
 	return {
-		refresh: "public",
-		access: "public",
+		refresh: cleaned,
+		access: cleaned,
 		expires: Date.now() + 365 * 24 * 60 * 60 * 1000,
 	};
 }
@@ -75,10 +78,10 @@ export default function (pi: ExtensionAPI) {
 		headers: DEFAULT_HEADERS,
 		models: FREE_MODELS,
 		oauth: {
-			name: "Zen",
+			name: "OpenCode Zen",
 			login: loginZen,
 			refreshToken: refreshZenToken,
-			getApiKey: () => "public",
+			getApiKey: (cred) => cred.access,
 		},
 		streamSimple: streamSimpleOpenAICompletions,
 	});
