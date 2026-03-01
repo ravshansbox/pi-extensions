@@ -1,4 +1,5 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { refreshAnthropicToken } from "@mariozechner/pi-ai";
 import { visibleWidth, matchesKey } from "@mariozechner/pi-tui";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -163,6 +164,10 @@ async function fetchClaudeUsage(): Promise<UsageSnapshot[]> {
 }
 
 async function fetchClaudeProfileAndUsage(token: string, authKey: string = "anthropic"): Promise<UsageSnapshot | null> {
+	return _fetchClaudeProfileAndUsage(token, authKey, true);
+}
+
+async function _fetchClaudeProfileAndUsage(token: string, authKey: string, allowRefresh: boolean): Promise<UsageSnapshot | null> {
 	try {
 		const controller = new AbortController();
 		const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -178,6 +183,12 @@ async function fetchClaudeProfileAndUsage(token: string, authKey: string = "anth
 		]);
 		clearTimeout(timer);
 		const res = usageRes;
+		if ((res.status === 401 || res.status === 403) && allowRefresh) {
+			const freshToken = await tryRefreshClaudeToken(authKey);
+			if (freshToken) {
+				return _fetchClaudeProfileAndUsage(freshToken, authKey, false);
+			}
+		}
 		if (!res.ok) {
 			return { provider: "anthropic", displayName: "claude", windows: [], error: `http ${res.status}`, email: profile.email };
 		}
@@ -510,6 +521,24 @@ function cacheEmail(authKey: string, email: string): void {
 			saveAuth(auth);
 		}
 	} catch {}
+}
+async function tryRefreshClaudeToken(authKey: string): Promise<string | null> {
+	try {
+		const auth = loadAuthData();
+		const entry = auth[authKey];
+		if (!entry?.refresh) return null;
+		const refreshed = await refreshAnthropicToken(entry.refresh);
+		auth[authKey] = {
+			...entry,
+			access: refreshed.access,
+			refresh: refreshed.refresh,
+			expires: refreshed.expires,
+		};
+		saveAuth(auth);
+		return refreshed.access;
+	} catch {
+		return null;
+	}
 }
 class UsageComponent {
 	private usages: UsageSnapshot[] = [];
