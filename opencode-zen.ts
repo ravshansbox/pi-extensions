@@ -12,24 +12,6 @@ const DEFAULT_HEADERS: Record<string, string> = {
 };
 const FREE_MODELS = [
 	{
-		id: "kimi-k2.5-free",
-		name: "Kimi K2.5",
-		reasoning: true,
-		input: ["text", "image"],
-		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-		contextWindow: 262144,
-		maxTokens: 262144,
-	},
-	{
-		id: "glm-5-free",
-		name: "GLM-5",
-		reasoning: true,
-		input: ["text"],
-		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-		contextWindow: 204800,
-		maxTokens: 131072,
-	},
-	{
 		id: "big-pickle",
 		name: "Big Pickle",
 		reasoning: true,
