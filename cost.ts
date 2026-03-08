@@ -1,9 +1,32 @@
+/**
+ * Cost Report Extension
+ *
+ * Displays AI provider cost statistics from session logs.
+ * Supports filtering by time range (week, month, all time) and allows
+ * deleting provider data from sessions.
+ *
+ * Usage:
+ *   /cost [days]  - Show cost report for last N days (default: 7)
+ *
+ * Controls:
+ *   ←→ tabs       - Switch between week/month/all views
+ *   ↑↓            - Navigate providers
+ *   enter         - Expand/collapse provider details
+ *   backspace     - Delete selected provider from sessions
+ *   esc           - Close
+ */
+
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { visibleWidth, matchesKey, Key } from "@mariozechner/pi-tui";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import * as readline from "node:readline";
+
+// =============================================================================
+// Types
+// =============================================================================
+
 interface DailyCost {
 	date: string;
 	input: number;
@@ -13,6 +36,7 @@ interface DailyCost {
 	total: number;
 	requests: number;
 }
+
 interface ProviderCost {
 	provider: string;
 	displayName: string;
@@ -21,9 +45,36 @@ interface ProviderCost {
 	totalRequests: number;
 	models: Map<string, number>;
 }
+
+// =============================================================================
+// Constants
+// =============================================================================
+
+const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
+	anthropic: "Claude",
+	openai: "OpenAI",
+	"openai-codex": "Codex",
+	google: "Gemini",
+	"google-gemini-cli": "Gemini",
+	"github-copilot": "Copilot",
+};
+
+// =============================================================================
+// Helper Functions
+// =============================================================================
+
+function formatProviderName(provider: string): string {
+	return PROVIDER_DISPLAY_NAMES[provider] || provider;
+}
+
+// =============================================================================
+// Session Log Scanning
+// =============================================================================
+
 async function scanSessionLogs(daysBack: number | null = 30): Promise<ProviderCost[]> {
 	const sessionsDir = path.join(os.homedir(), ".pi", "agent", "sessions");
 	const providerCosts = new Map<string, ProviderCost>();
+
 	const cutoffDate = new Date();
 	if (daysBack !== null) {
 		cutoffDate.setDate(cutoffDate.getDate() - daysBack);
@@ -31,33 +82,40 @@ async function scanSessionLogs(daysBack: number | null = 30): Promise<ProviderCo
 		// For "all time", set cutoff to epoch so everything is included
 		cutoffDate.setTime(0);
 	}
+
 	if (!fs.existsSync(sessionsDir)) {
 		return [];
 	}
+
 	const sessionDirs = fs.readdirSync(sessionsDir, { withFileTypes: true })
 		.filter(d => d.isDirectory())
 		.map(d => path.join(sessionsDir, d.name));
+
 	for (const dir of sessionDirs) {
 		const files = fs.readdirSync(dir)
-			.filter(f => f.endsWith('.jsonl'))
+			.filter(f => f.endsWith(".jsonl"))
 			.map(f => path.join(dir, f));
+
 		for (const file of files) {
 			await scanSessionFile(file, cutoffDate, providerCosts);
 		}
 	}
+
 	return Array.from(providerCosts.values())
 		.sort((a, b) => b.totalCost - a.totalCost);
 }
+
 async function scanSessionFile(
 	filePath: string,
 	cutoffDate: Date,
-	providerCosts: Map<string, ProviderCost>
+	providerCosts: Map<string, ProviderCost>,
 ): Promise<void> {
 	const fileStream = fs.createReadStream(filePath);
 	const rl = readline.createInterface({
 		input: fileStream,
 		crlfDelay: Infinity,
 	});
+
 	for await (const line of rl) {
 		try {
 			const entry = JSON.parse(line);
@@ -65,11 +123,15 @@ async function scanSessionFile(
 				const msg = entry.message;
 				const timestamp = new Date(entry.timestamp || msg.timestamp);
 				if (timestamp < cutoffDate) continue;
+
 				const provider = msg.provider || "unknown";
 				const model = msg.model || "unknown";
 				const usage = msg.usage;
+
 				if (!usage?.cost) continue;
-				const dateKey = timestamp.toISOString().split('T')[0];
+
+				const dateKey = timestamp.toISOString().split("T")[0];
+
 				if (!providerCosts.has(provider)) {
 					providerCosts.set(provider, {
 						provider,
@@ -80,6 +142,7 @@ async function scanSessionFile(
 						models: new Map(),
 					});
 				}
+
 				const pc = providerCosts.get(provider)!;
 				let day = pc.days.find(d => d.date === dateKey);
 				if (!day) {
@@ -94,6 +157,7 @@ async function scanSessionFile(
 					};
 					pc.days.push(day);
 				}
+
 				day.input += usage.cost.input || 0;
 				day.output += usage.cost.output || 0;
 				day.cacheRead += usage.cost.cacheRead || 0;
@@ -102,39 +166,39 @@ async function scanSessionFile(
 				day.requests += 1;
 				pc.totalCost += usage.cost.total || 0;
 				pc.totalRequests += 1;
+
 				const modelCost = pc.models.get(model) || 0;
 				pc.models.set(model, modelCost + (usage.cost.total || 0));
 			}
 		} catch {
+			// Skip malformed lines
 		}
 	}
 }
-function formatProviderName(provider: string): string {
-	const names: Record<string, string> = {
-		anthropic: "Claude",
-		openai: "OpenAI",
-		"openai-codex": "Codex",
-		google: "Gemini",
-		"google-gemini-cli": "Gemini",
-		"github-copilot": "Copilot",
-	};
-	return names[provider] || provider;
-}
+
+// =============================================================================
+// Provider Deletion
+// =============================================================================
+
 async function deleteProviderFromSessions(provider: string): Promise<void> {
 	const sessionsDir = path.join(os.homedir(), ".pi", "agent", "sessions");
 	if (!fs.existsSync(sessionsDir)) return;
+
 	const sessionDirs = fs.readdirSync(sessionsDir, { withFileTypes: true })
 		.filter(d => d.isDirectory())
 		.map(d => path.join(sessionsDir, d.name));
+
 	for (const dir of sessionDirs) {
 		const files = fs.readdirSync(dir)
-			.filter(f => f.endsWith('.jsonl'))
+			.filter(f => f.endsWith(".jsonl"))
 			.map(f => path.join(dir, f));
+
 		for (const file of files) {
 			const fileStream = fs.createReadStream(file);
 			const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
 			const kept: string[] = [];
 			let modified = false;
+
 			for await (const line of rl) {
 				if (!line.trim()) continue;
 				try {
@@ -151,12 +215,18 @@ async function deleteProviderFromSessions(provider: string): Promise<void> {
 					kept.push(line);
 				}
 			}
+
 			if (modified) {
-				await fs.promises.writeFile(file, kept.join('\n') + '\n');
+				await fs.promises.writeFile(file, kept.join("\n") + "\n");
 			}
 		}
 	}
 }
+
+// =============================================================================
+// UI Component
+// =============================================================================
+
 class CostComponent {
 	private costs: ProviderCost[] = [];
 	private loading = true;
@@ -172,7 +242,13 @@ class CostComponent {
 		{ label: "month", days: 30 },
 		{ label: "all", days: null },
 	];
-	constructor(tui: { requestRender: () => void }, theme: any, onClose: () => void, daysBack: number) {
+
+	constructor(
+		tui: { requestRender: () => void },
+		theme: any,
+		onClose: () => void,
+		daysBack: number,
+	) {
 		this.tui = tui;
 		this.theme = theme;
 		this.onClose = onClose;
@@ -182,12 +258,14 @@ class CostComponent {
 		if (this.currentTab === -1) this.currentTab = 0;
 		this.load();
 	}
+
 	private async load() {
 		const days = this.tabs[this.currentTab].days;
 		this.costs = await scanSessionLogs(days);
 		this.loading = false;
 		this.tui.requestRender();
 	}
+
 	handleInput(data: string): void {
 		if (matchesKey(data, Key.escape)) {
 			this.onClose();
@@ -229,7 +307,9 @@ class CostComponent {
 			}
 		}
 	}
+
 	invalidate(): void {}
+
 	render(width: number): string[] {
 		const t = this.theme;
 		const dim = (s: string) => t.fg("muted", s);
@@ -237,14 +317,17 @@ class CostComponent {
 		const accent = (s: string) => t.fg("accent", s);
 		const success = (s: string) => t.fg("success", s);
 		const warning = (s: string) => t.fg("warning", s);
+
 		const totalW = width;
 		const innerW = totalW - 4;
 		const hLine = "─".repeat(totalW - 2);
+
 		const box = (content: string) => {
 			const contentW = visibleWidth(content);
 			const pad = Math.max(0, innerW - contentW);
 			return dim("│ ") + content + " ".repeat(pad) + dim(" │");
 		};
+
 		const lines: string[] = [];
 		lines.push(dim(`╭${hLine}╮`));
 		lines.push(box(bold(accent(`cost`))));
@@ -263,6 +346,7 @@ class CostComponent {
 		lines.push(box(tabLine.join(" ")));
 
 		lines.push(dim(`├${hLine}┤`));
+
 		if (this.loading) {
 			lines.push(box("scanning session logs..."));
 		} else if (this.costs.length === 0) {
@@ -270,35 +354,52 @@ class CostComponent {
 		} else {
 			let grandTotal = 0;
 			let idx = 0;
+
 			for (const pc of this.costs) {
 				grandTotal += pc.totalCost;
 				const costStr = `$${pc.totalCost.toFixed(4)}`;
 				const color = pc.totalCost > 1 ? warning : success;
 				const cursorMark = idx === this.cursor ? bold(accent("> ")) : "  ";
-				lines.push(box(`${cursorMark}${bold(pc.displayName.toLowerCase())} ${color(costStr)} ${dim(`(${pc.totalRequests} requests)`)}`));
+
+				lines.push(
+					box(`${cursorMark}${bold(pc.displayName.toLowerCase())} ${color(costStr)} ${dim(`(${pc.totalRequests} requests)`)}`),
+				);
+
 				if (this.expanded === pc.provider) {
 					const sortedModels = Array.from(pc.models.entries())
 						.sort((a, b) => b[1] - a[1])
 						.slice(0, 3);
-					for (const [model, cost] of sortedModels) {
-						const shortModel = model.length > 25 ? model.substring(0, 22) + "..." : model;
-						lines.push(box(dim(`    ${shortModel.toLowerCase()}: $${cost.toFixed(4)}`)));
-					}
 
+					for (const [model, cost] of sortedModels) {
+						const shortModel =
+							model.length > 25 ? model.substring(0, 22) + "..." : model;
+						lines.push(
+							box(dim(`    ${shortModel.toLowerCase()}: $${cost.toFixed(4)}`)),
+						);
+					}
 				}
 				idx++;
 			}
+
 			lines.push(dim(`├${hLine}┤`));
 			const totalColor = grandTotal > 10 ? warning : success;
 			lines.push(box(`${bold("total:")} ${totalColor(`$${grandTotal.toFixed(4)}`)}`));
 		}
+
 		lines.push(dim(`├${hLine}┤`));
 		lines.push(box(dim("←→ tabs  ↑↓ navigate  enter expand  backspace delete  esc close")));
 		lines.push(dim(`╰${hLine}╯`));
+
 		return lines;
 	}
+
 	dispose(): void {}
 }
+
+// =============================================================================
+// Extension Entry Point
+// =============================================================================
+
 export default function (pi: ExtensionAPI) {
 	pi.registerCommand("cost", {
 		description: "Show cost report from session logs",

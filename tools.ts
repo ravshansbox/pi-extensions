@@ -27,7 +27,11 @@ import {
 	createWriteTool,
 } from "@mariozechner/pi-coding-agent";
 import { Text } from "@mariozechner/pi-tui";
-import { homedir } from "os";
+import { homedir } from "node:os";
+
+// =============================================================================
+// Helper Functions
+// =============================================================================
 
 /**
  * Shorten a path by replacing home directory with ~
@@ -40,7 +44,10 @@ function shortenPath(path: string): string {
 	return path;
 }
 
-// Cache for built-in tools by cwd
+// =============================================================================
+// Tool Cache
+// =============================================================================
+
 const toolCache = new Map<string, ReturnType<typeof createBuiltInTools>>();
 
 function createBuiltInTools(cwd: string) {
@@ -63,6 +70,10 @@ function getBuiltInTools(cwd: string) {
 	}
 	return tools;
 }
+
+// =============================================================================
+// Extension Entry Point
+// =============================================================================
 
 export default function (pi: ExtensionAPI) {
 	// =========================================================================
