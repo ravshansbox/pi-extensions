@@ -1,12 +1,12 @@
 /**
- * Qwen Code Provider Extension
+ * Qwen Provider Extension
  *
  * Provides access to Qwen models via OAuth authentication with chat.qwen.ai.
  * Uses device code flow with PKCE for secure browser-based authentication.
  *
  * Usage:
- *   pi -e ~/.pi/agent/extensions/custom-provider-qwen-code
- *   # Then /login qwen-code to authenticate via OAuth
+ *   pi -e ~/.pi/agent/extensions
+ *   # Then /login qwen to authenticate via OAuth
  *
  * Models supported:
  *   - qwen3.5-plus (reasoning, text)
@@ -340,7 +340,7 @@ export default function (pi: ExtensionAPI) {
 		api: "openai-completions",
 		models: qwenCodeModels,
 		oauth: {
-			name: "Qwen Code",
+			name: "Qwen",
 			login: loginQwen,
 			refreshToken: refreshQwenToken,
 			getApiKey: (cred) => cred.access,
