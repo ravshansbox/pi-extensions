@@ -214,8 +214,7 @@ async function handleCommand(args: string, ctx: any): Promise<void> {
 			ctx.ui.notify(`${TITLE} account added at index ${accounts.length - 1}${account.email ? ` (${account.email})` : ""}`, "success");
 			return;
 		}
-		case "list":
-		case "": {
+		case "list": {
 			const accounts = getAccounts();
 			if (accounts.length === 0) {
 				ctx.ui.notify(`${TITLE}: no accounts configured`, "info");
@@ -224,11 +223,14 @@ async function handleCommand(args: string, ctx: any): Promise<void> {
 			const preferredIndex = hashIndex(sessionKey, accounts.length);
 			const lines = [
 				`${TITLE} accounts`,
-				`Session hash target: [${preferredIndex}]`,
 				"",
 				...accounts.map((account, index) => formatAccountLine(index, account, preferredIndex)),
 			];
 			ctx.ui.notify(lines.join("\n"), "info");
+			return;
+		}
+		case "": {
+			ctx.ui.notify(`Usage: /${PROVIDER} [add|list|remove <index>]`, "error");
 			return;
 		}
 		case "remove": {
@@ -250,20 +252,41 @@ async function handleCommand(args: string, ctx: any): Promise<void> {
 			ctx.ui.notify(`Removed ${TITLE} account [${index}]${removed.email ? ` (${removed.email})` : ""}`, "success");
 			return;
 		}
-		case "current": {
-			const accounts = getAccounts();
-			if (accounts.length === 0) {
-				ctx.ui.notify(`${TITLE}: no accounts configured`, "info");
-				return;
-			}
-			const index = hashIndex(sessionKey, accounts.length);
-			const account = accounts[index];
-			ctx.ui.notify(`${TITLE} current session target: [${index}] ${account.email ?? "unknown"}`, "info");
-			return;
-		}
 		default:
-			ctx.ui.notify(`Usage: /${PROVIDER} [add|list|remove <index>|current]`, "error");
+			ctx.ui.notify(`Usage: /${PROVIDER} [add|list|remove <index>]`, "error");
 	}
+}
+
+function getArgumentCompletions(prefix: string) {
+	const trimmed = prefix.trimStart();
+	const parts = trimmed.split(/\s+/).filter(Boolean);
+	const endsWithSpace = prefix.endsWith(" ");
+	const accounts = getAccounts();
+
+	if (parts.length === 0) {
+		return [
+			{ value: "add", label: "add" },
+			{ value: "list", label: "list" },
+			{ value: "remove", label: "remove" },
+		];
+	}
+
+	if (parts.length === 1 && !endsWithSpace) {
+		const subcommands = ["add", "list", "remove"];
+		return subcommands
+			.filter((item) => item.startsWith(parts[0]))
+			.map((item) => ({ value: item, label: item }));
+	}
+
+	if (parts[0] === "remove") {
+		const indexPrefix = endsWithSpace ? "" : (parts[1] ?? "");
+		return accounts
+			.map((_account, index) => String(index))
+			.filter((index) => index.startsWith(indexPrefix))
+			.map((index) => ({ value: `remove ${index}`, label: index }));
+	}
+
+	return null;
 }
 
 function makeFailoverStream() {
@@ -367,6 +390,7 @@ export default function (pi: ExtensionAPI) {
 
 	pi.registerCommand(PROVIDER, {
 		description: "Manage Anthropic multi-account provider",
+		getArgumentCompletions,
 		handler: async (args, ctx) => handleCommand(args, ctx),
 	});
 }
