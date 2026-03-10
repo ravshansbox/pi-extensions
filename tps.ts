@@ -5,10 +5,10 @@
  * Shows input/output tokens, cache usage, cost, duration, and tokens/second.
  *
  * Output format:
- *   ↑{input} ↓{output} R{cacheRead} W{cacheWrite} ${cost} D{duration}s {tps}tps [{provider}, {email}]
+ *   ↑{input} ↓{output} [R{cacheRead}] [W{cacheWrite}] ${cost} D{duration}s {tps}tps [{provider}, {email}]
  *
  * Example:
- *   ↑1.2k ↓345 R0 W0 $0.0012 D2.3s 150.0tps [anthropic, user@example.com]
+ *   ↑1.2k ↓345 R120 W30 $0.001 D2.3s 150.0tps [anthropic, user@example.com]
  */
 
 import type { AssistantMessage } from "@mariozechner/pi-ai";
@@ -106,10 +106,13 @@ export default function (pi: ExtensionAPI) {
 			login = `${provider}, ${email}`;
 		}
 
-		// Format price based on magnitude
-		const price = cost >= 0.01 ? `$${cost.toFixed(2)}` : `$${cost.toFixed(4)}`;
+		const price = `$${cost.toFixed(3)}`;
+		const cacheParts: string[] = [];
+		if (cacheRead > 0) cacheParts.push(`R${fmt(cacheRead)}`);
+		if (cacheWrite > 0) cacheParts.push(`W${fmt(cacheWrite)}`);
+		const cacheSegment = cacheParts.length > 0 ? ` ${cacheParts.join(" ")}` : "";
 
-		const msg = `↑${fmt(input)} ↓${fmt(output)} R${fmt(cacheRead)} W${fmt(cacheWrite)} ${price} D${elapsedSeconds.toFixed(1)}s ${tokensPerSecond.toFixed(1)}tps [${login}]`;
+		const msg = `↑${fmt(input)} ↓${fmt(output)}${cacheSegment} ${price} D${elapsedSeconds.toFixed(1)}s ${tokensPerSecond.toFixed(1)}tps [${login}]`;
 		ctx.ui.notify(msg, "info");
 	});
 }
