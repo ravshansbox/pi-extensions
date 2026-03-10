@@ -45,7 +45,7 @@ const models = [
 		reasoning: true,
 		input: ["text", "image"] as const,
 		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-		contextWindow: 400000,
+		contextWindow: 1050000,
 		maxTokens: 128000,
 	},
 	{
