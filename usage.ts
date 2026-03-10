@@ -2,7 +2,7 @@
  * Usage Statistics Extension
  *
  * Displays AI provider usage limits and rate limits in an interactive UI.
- * Supports multiple providers: Claude (Anthropic), Codex (OpenAI), and z.ai.
+ * Supports multiple providers: Claude (Anthropic) and Codex (OpenAI).
  * Allows switching between multiple authenticated accounts per provider.
  *
  * Usage:
@@ -72,7 +72,6 @@ const STATUS_RACE_TIMEOUT_MS = 8000;
 const STATUS_URLS: Record<string, string> = {
 	anthropic: "https://status.anthropic.com/api/v2/status.json",
 	codex: "https://status.openai.com/api/v2/status.json",
-	copilot: "https://www.githubstatus.com/api/v2/status.json",
 };
 
 // =============================================================================
@@ -503,9 +502,11 @@ async function fetchCodexProfileAndUsage(
 		if (data.rate_limit?.primary_window) {
 			const pw = data.rate_limit.primary_window;
 			const resetDate = pw.reset_at ? new Date(pw.reset_at * 1000) : undefined;
-			const windowHours = Math.round((pw.limit_window_seconds || 10800) / 3600);
+			const windowHours = pw.limit_window_seconds
+				? Math.round(pw.limit_window_seconds / 3600)
+				: undefined;
 			windows.push({
-				label: `${windowHours}h`,
+				label: windowHours !== undefined ? `${windowHours}h` : "primary",
 				usedPercent: pw.used_percent || 0,
 				resetDescription: resetDate ? formatReset(resetDate) : undefined,
 			});
@@ -626,149 +627,6 @@ async function fetchCodexUsage(modelRegistry: any): Promise<UsageSnapshot[]> {
 }
 
 // =============================================================================
-// z.ai Usage
-// =============================================================================
-
-async function fetchZaiProfileAndUsage(
-	apiKey: string,
-	authKey: string = "zai",
-): Promise<UsageSnapshot> {
-	try {
-		const controller = new AbortController();
-		const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-		const res = await fetch("https://api.z.ai/api/monitor/usage/quota/limit", {
-			method: "GET",
-			headers: {
-				Authorization: `Bearer ${apiKey}`,
-				Accept: "application/json",
-			},
-			signal: controller.signal,
-		});
-		clearTimeout(timer);
-
-		if (!res.ok) {
-			return {
-				provider: "zai",
-				displayName: "z.ai",
-				windows: [],
-				error: `http ${res.status}`,
-			};
-		}
-
-		const data = await res.json() as any;
-
-		if (!data.success || data.code !== 200) {
-			return {
-				provider: "zai",
-				displayName: "z.ai",
-				windows: [],
-				error: data.msg || "api error",
-			};
-		}
-
-		const windows: RateWindow[] = [];
-		const limits = data.data?.limits || [];
-
-		const sortedLimits = [...limits].sort((a: any, b: any) => {
-			if (a.type === "TOKENS_LIMIT" && b.type !== "TOKENS_LIMIT") return -1;
-			if (a.type !== "TOKENS_LIMIT" && b.type === "TOKENS_LIMIT") return 1;
-			return 0;
-		});
-
-		for (const limit of sortedLimits) {
-			const type = limit.type;
-			const percent = limit.percentage || 0;
-			const nextReset = limit.nextResetTime ? new Date(limit.nextResetTime) : undefined;
-
-			let windowLabel = "limit";
-			if (limit.unit === 1) windowLabel = `${limit.number}d`;
-			else if (limit.unit === 3) windowLabel = `${limit.number}h`;
-			else if (limit.unit === 5) windowLabel = `${limit.number}m`;
-
-			if (type === "TOKENS_LIMIT") {
-				windows.push({
-					label: `${windowLabel}`,
-					usedPercent: percent,
-					resetDescription: nextReset ? formatReset(nextReset) : undefined,
-				});
-			} else if (type === "TIME_LIMIT") {
-				windows.push({
-					label: "month",
-					usedPercent: percent,
-					resetDescription: nextReset ? formatReset(nextReset) : undefined,
-				});
-			}
-		}
-
-		const planName = data.data?.planName || data.data?.plan || undefined;
-
-		if (windows.length === 0 && planName) {
-			return {
-				provider: "zai",
-				displayName: "z.ai",
-				windows,
-				plan: planName,
-			};
-		}
-
-		return {
-			provider: "zai",
-			displayName: "z.ai",
-			windows,
-			plan: planName,
-		};
-	} catch (e) {
-		return {
-			provider: "zai",
-			displayName: "z.ai",
-			windows: [],
-			error: String(e),
-		};
-	}
-}
-
-async function fetchZaiUsage(): Promise<UsageSnapshot[]> {
-	const authData = loadAuthData();
-	const zaiKeys = getAuthEntriesForProvider(authData, "zai");
-	const selectedKey = getSelectedAuthKey(authData, "zai");
-
-	const snapshots: UsageSnapshot[] = [];
-
-	// Try env var first
-	let envApiKey = process.env.Z_AI_API_KEY;
-
-	// If no auth entries found, try env var
-	if (zaiKeys.length === 0 && envApiKey) {
-		const snapshot = await fetchZaiProfileAndUsage(envApiKey);
-		snapshot.selected = true;
-		snapshot.authKey = "zai";
-		snapshots.push(snapshot);
-	}
-
-	// Fetch for each zai auth entry
-	for (const key of zaiKeys) {
-		const entry = authData[key];
-		if (!entry?.key) continue;
-
-		const snapshot = await fetchZaiProfileAndUsage(entry.key, key);
-		snapshot.selected = key === selectedKey;
-		snapshot.authKey = key;
-		snapshots.push(snapshot);
-	}
-
-	if (snapshots.length === 0) {
-		snapshots.push({
-			provider: "zai",
-			displayName: "z.ai",
-			windows: [],
-			error: "no api key",
-		});
-	}
-
-	return snapshots;
-}
-
-// =============================================================================
 // Helper Functions
 // =============================================================================
 
@@ -826,7 +684,7 @@ class UsageComponent {
 		const timeout = <T>(p: Promise<T>, ms: number, fallback: T) =>
 			Promise.race([p, new Promise<T>((r) => setTimeout(() => r(fallback), ms))]);
 
-		const [claudeSnapshots, codexSnapshots, zaiSnapshots, claudeStatus, codexStatus] =
+		const [claudeSnapshots, codexSnapshots, claudeStatus, codexStatus] =
 			await Promise.all([
 				timeout(
 					fetchClaudeUsage(),
@@ -837,11 +695,6 @@ class UsageComponent {
 					fetchCodexUsage(this.modelRegistry),
 					USAGE_RACE_TIMEOUT_MS,
 					[{ provider: "codex", displayName: "codex", windows: [], error: "timeout" }] as UsageSnapshot[],
-				),
-				timeout(
-					fetchZaiUsage(),
-					USAGE_RACE_TIMEOUT_MS,
-					[{ provider: "zai", displayName: "z.ai", windows: [], error: "timeout" }] as UsageSnapshot[],
 				),
 				timeout(fetchProviderStatus("anthropic"), STATUS_RACE_TIMEOUT_MS, {
 					indicator: "unknown" as const,
@@ -854,7 +707,7 @@ class UsageComponent {
 		for (const s of claudeSnapshots) s.status = claudeStatus;
 		for (const s of codexSnapshots) s.status = codexStatus;
 
-		const allUsages = [...claudeSnapshots, ...codexSnapshots, ...zaiSnapshots];
+		const allUsages = [...claudeSnapshots, ...codexSnapshots];
 		this.usages = allUsages.filter(
 			(u) =>
 				u.windows.length > 0 ||
@@ -903,9 +756,7 @@ class UsageComponent {
 				? "anthropic"
 				: usage.provider === "codex"
 					? "openai-codex"
-					: usage.provider === "zai"
-						? "zai"
-						: usage.provider;
+					: usage.provider;
 
 		const auth = loadAuthData();
 		const updated = reorganizeKeys(auth, usage.authKey, prefix);
