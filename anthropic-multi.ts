@@ -289,6 +289,25 @@ function getArgumentCompletions(prefix: string) {
 	return null;
 }
 
+function remapAssistantMessage(message: any, model: Model<Api>) {
+	if (!message || message.role !== "assistant") return message;
+	return {
+		...message,
+		api: model.api,
+		provider: model.provider,
+		model: model.id,
+	};
+}
+
+function remapStreamEvent(event: any, model: Model<Api>) {
+	if (!event || typeof event !== "object") return event;
+	const remapped = { ...event };
+	if ("partial" in remapped) remapped.partial = remapAssistantMessage(remapped.partial, model);
+	if ("message" in remapped) remapped.message = remapAssistantMessage(remapped.message, model);
+	if ("error" in remapped) remapped.error = remapAssistantMessage(remapped.error, model);
+	return remapped;
+}
+
 function makeFailoverStream() {
 	return function streamMultiProvider(model: Model<Api>, context: Context, options?: SimpleStreamOptions): AssistantMessageEventStream {
 		const stream = createAssistantMessageEventStream();
@@ -310,7 +329,8 @@ function makeFailoverStream() {
 				const buffered: any[] = [];
 				let committed = false;
 
-				for await (const event of inner as any) {
+				for await (const rawEvent of inner as any) {
+					const event = remapStreamEvent(rawEvent, model);
 					if (!committed) {
 						if (event.type === "start") {
 							buffered.push(event);

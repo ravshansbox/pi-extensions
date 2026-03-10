@@ -52,11 +52,18 @@ interface ProviderCost {
 
 const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
 	anthropic: "Claude",
+	"anthropic-multi": "Claude Multi",
 	openai: "OpenAI",
 	"openai-codex": "Codex",
+	"openai-codex-multi": "Codex Multi",
 	google: "Gemini",
 	"google-gemini-cli": "Gemini",
 	"github-copilot": "Copilot",
+};
+
+const MULTI_PROVIDER_BASES: Record<string, string> = {
+	"anthropic-multi": "anthropic",
+	"openai-codex-multi": "openai-codex",
 };
 
 // =============================================================================
@@ -65,6 +72,15 @@ const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
 
 function formatProviderName(provider: string): string {
 	return PROVIDER_DISPLAY_NAMES[provider] || provider;
+}
+
+function getEffectiveProvider(loggedProvider: string, selectedProvider?: string, loggedModel?: string, selectedModel?: string): string {
+	if (!selectedProvider) return loggedProvider;
+	if (loggedProvider === selectedProvider) return loggedProvider;
+	const baseProvider = MULTI_PROVIDER_BASES[selectedProvider];
+	if (!baseProvider || loggedProvider !== baseProvider) return loggedProvider;
+	if (selectedModel && loggedModel && selectedModel !== loggedModel) return loggedProvider;
+	return selectedProvider;
 }
 
 // =============================================================================
@@ -116,16 +132,25 @@ async function scanSessionFile(
 		crlfDelay: Infinity,
 	});
 
+	let selectedProvider: string | undefined;
+	let selectedModel: string | undefined;
+
 	for await (const line of rl) {
 		try {
 			const entry = JSON.parse(line);
+			if (entry.type === "model_change") {
+				selectedProvider = entry.provider || selectedProvider;
+				selectedModel = entry.modelId || selectedModel;
+				continue;
+			}
+
 			if (entry.type === "message" && entry.message?.role === "assistant") {
 				const msg = entry.message;
 				const timestamp = new Date(entry.timestamp || msg.timestamp);
 				if (timestamp < cutoffDate) continue;
 
-				const provider = msg.provider || "unknown";
 				const model = msg.model || "unknown";
+				const provider = getEffectiveProvider(msg.provider || "unknown", selectedProvider, model, selectedModel);
 				const usage = msg.usage;
 
 				if (!usage?.cost) continue;
