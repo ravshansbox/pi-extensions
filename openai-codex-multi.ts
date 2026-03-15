@@ -45,7 +45,7 @@ const models = [
 		reasoning: true,
 		input: ["text", "image"] as const,
 		cost: { input: 2.5, output: 15, cacheRead: 0.25, cacheWrite: 0 },
-		contextWindow: 1000000,
+		contextWindow: 1050000,
 		maxTokens: 128000,
 	},
 	{
@@ -53,7 +53,7 @@ const models = [
 		name: "GPT-5.3 Codex",
 		reasoning: true,
 		input: ["text", "image"] as const,
-		cost: { input: 1.75, output: 14, cacheRead: 0.175, cacheWrite: 0 },
+		cost: { input: 1.75, output: 14, cacheRead: 0.17, cacheWrite: 0 },
 		contextWindow: 400000,
 		maxTokens: 128000,
 	},
